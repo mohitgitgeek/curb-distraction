@@ -13,6 +13,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run FocusCurb Web Dashboard")
     parser.add_argument("--port", type=int, default=5000, help="Port to run web dashboard on (default: 5000)")
     parser.add_argument("--debug", action="store_true", help="Run Flask in debug mode")
+    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind (default: 127.0.0.1)")
     args = parser.parse_args()
 
-    start_server(port=args.port, debug=args.debug)
+    start_server(host=args.host, port=args.port, debug=args.debug)

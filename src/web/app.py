@@ -55,9 +55,9 @@ def api_sync():
     count = service.sync_history(days_back=days_back)
     return jsonify({"status": "success", "synced_count": count})
 
-def start_server(port=5000, debug=False):
-    print(f"[FocusCurb] Starting Dashboard on http://127.0.0.1:{port}")
-    app.run(host="127.0.0.1", port=port, debug=debug)
+def start_server(host="127.0.0.1", port=5000, debug=False):
+    print(f"[FocusCurb] Starting Dashboard on http://{host}:{port}")
+    app.run(host=host, port=port, debug=debug)
 
 if __name__ == "__main__":
     start_server(debug=True)
