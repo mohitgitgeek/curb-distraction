@@ -1,0 +1,29 @@
+# Environment & Secrets
+.env
+
+# Data & Personal History Caches
+data/
+*.db
+*.sqlite
+vector_index.json
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE & Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
