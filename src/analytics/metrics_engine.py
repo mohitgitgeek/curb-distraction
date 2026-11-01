@@ -6,13 +6,31 @@ from src.config import PRODUCTIVE_CATEGORIES, DISTRACTIVE_CATEGORIES, NEUTRAL_CA
 class MetricsEngine:
     """Calculates daily watch time, distraction indexes, temporal habits, and binge patterns."""
 
-    @staticmethod
-    def classify_category(category: str) -> str:
-        """Returns 'Productive', 'Distractive', or 'Neutral'."""
-        if category in PRODUCTIVE_CATEGORIES:
-            return "Productive"
-        elif category in DISTRACTIVE_CATEGORIES:
+    @classmethod
+    def classify_record(cls, record: Dict[str, Any]) -> str:
+        """Classify a record as 'Productive', 'Distractive', or 'Neutral'.
+        YouTube Shorts are by default ALWAYS Distractive."""
+        url = record.get("url", "")
+        cat = record.get("category", "")
+        title = (record.get("title") or "").lower()
+
+        # YouTube Shorts are 100% Distractive by default
+        if record.get("is_shorts") or "/shorts/" in url or cat == "Shorts" or "#shorts" in title or "#short" in title:
             return "Distractive"
+
+        if cat in PRODUCTIVE_CATEGORIES:
+            return "Productive"
+        elif cat in DISTRACTIVE_CATEGORIES:
+            return "Distractive"
+        return "Neutral"
+
+    @classmethod
+    def classify_category(cls, category: str) -> str:
+        """Returns 'Productive', 'Distractive', or 'Neutral'."""
+        if category == "Shorts" or category in DISTRACTIVE_CATEGORIES:
+            return "Distractive"
+        elif category in PRODUCTIVE_CATEGORIES:
+            return "Productive"
         return "Neutral"
 
     @classmethod
@@ -39,7 +57,8 @@ class MetricsEngine:
 
         # 1. Total Daily Watch Time
         total_watch_sec = sum(r.get("duration_sec", 0) for r in day_records)
-        total_videos = len([r for r in day_records if r.get("type") == "video"])
+        total_videos = len([r for r in day_records if r.get("type") in ["video", "shorts"]])
+        total_shorts = len([r for r in day_records if r.get("type") == "shorts" or "/shorts/" in r.get("url", "") or r.get("category") == "Shorts"])
         total_searches = len([r for r in day_records if r.get("type") == "search"])
 
         # 2. Category & Productivity Breakdown
@@ -48,12 +67,19 @@ class MetricsEngine:
         type_durations = {"Productive": 0, "Distractive": 0, "Neutral": 0}
 
         for r in day_records:
-            cat = r.get("category", "General")
+            # Force category to Shorts if it is a short
+            if r.get("is_shorts") or "/shorts/" in r.get("url", "") or "#shorts" in (r.get("title") or "").lower():
+                cat = "Shorts"
+                r["category"] = "Shorts"
+                r["is_shorts"] = True
+            else:
+                cat = r.get("category", "General")
+
             dur = r.get("duration_sec", 0)
             category_durations[cat] += dur
             category_counts[cat] += 1
 
-            classified = cls.classify_category(cat)
+            classified = cls.classify_record(r)
             type_durations[classified] += dur
 
         # Distraction / Productivity ratios
@@ -68,17 +94,17 @@ class MetricsEngine:
             dur = r.get("duration_sec", 0)
             if 0 <= h < 24:
                 hourly_watch_sec[h] += dur
-                if cls.classify_category(r.get("category", "General")) == "Distractive":
+                if cls.classify_record(r) == "Distractive":
                     hourly_distractive_sec[h] += dur
 
         peak_hour = max(range(24), key=lambda h: hourly_distractive_sec[h]) if any(hourly_distractive_sec) else -1
 
-        # 4. Binge Detection (3 or more consecutive distractive videos)
+        # 4. Binge Detection (3 or more consecutive distractive videos/shorts)
         binge_sessions = []
         current_streak = []
         for r in sorted(day_records, key=lambda x: x.get("visited_at", "")):
-            if r.get("type") == "video":
-                if cls.classify_category(r.get("category", "General")) == "Distractive":
+            if r.get("type") in ["video", "shorts"]:
+                if cls.classify_record(r) == "Distractive":
                     current_streak.append(r)
                 else:
                     if len(current_streak) >= 3:
@@ -104,7 +130,7 @@ class MetricsEngine:
         for d in available_dates[:7]:
             d_records = records_by_date[d]
             d_tot_sec = sum(item.get("duration_sec", 0) for item in d_records)
-            d_dist_sec = sum(item.get("duration_sec", 0) for item in d_records if cls.classify_category(item.get("category", "General")) == "Distractive")
+            d_dist_sec = sum(item.get("duration_sec", 0) for item in d_records if cls.classify_record(item) == "Distractive")
             trend_7d.append({
                 "date": d,
                 "total_hours": round(d_tot_sec / 3600, 2),
@@ -119,6 +145,7 @@ class MetricsEngine:
             "total_watch_seconds": total_watch_sec,
             "total_watch_fmt": cls.format_duration(total_watch_sec),
             "total_videos": total_videos,
+            "total_shorts": total_shorts,
             "total_searches": total_searches,
             "productive_seconds": type_durations["Productive"],
             "productive_fmt": cls.format_duration(type_durations["Productive"]),

@@ -29,6 +29,8 @@
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0b0f19; }
     ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    .pulse-skeleton { animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
   </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased">
@@ -84,8 +86,8 @@
         <p id="kpiVideoCount" class="text-xs text-gray-400 mt-1">across -- videos watched</p>
       </div>
 
-      <!-- Distraction Ratio -->
-      <div class="glass-card rounded-2xl p-5 shadow-sm">
+      <!-- Distraction Ratio (with explicit Shorts count!) -->
+      <div class="glass-card rounded-2xl p-5 shadow-sm border border-rose-900/30">
         <div class="flex items-center justify-between text-gray-400 text-xs font-semibold uppercase tracking-wider">
           <span>Distraction Index</span>
           <span class="p-1.5 rounded-lg bg-rose-950 text-rose-400">⚠️</span>
@@ -93,7 +95,10 @@
         <div class="mt-3 flex items-baseline gap-2">
           <div id="kpiDistractionPct" class="text-3xl font-extrabold text-rose-400">--%</div>
         </div>
-        <p id="kpiDistractionFmt" class="text-xs text-gray-400 mt-1">-- in distraction categories</p>
+        <div class="flex flex-col mt-1">
+          <span id="kpiDistractionFmt" class="text-xs text-gray-400">-- in distraction categories</span>
+          <span id="kpiShortsCount" class="text-xs font-bold text-rose-400 mt-0.5">⚠️ -- Shorts watched</span>
+        </div>
       </div>
 
       <!-- Productive Watch Time -->
@@ -121,25 +126,30 @@
       </div>
     </div>
 
-    <!-- AI Productivity Coach & Suggestions (Promptable) -->
-    <div class="glass-card rounded-2xl p-6 border-indigo-500/30 shadow-xl relative overflow-hidden">
+    <!-- AI Productivity Coach & Dynamic Roadmap (Interactive) -->
+    <div class="glass-card rounded-2xl p-6 border-indigo-500/40 shadow-xl relative overflow-hidden">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-gray-800">
         <div>
           <div class="flex items-center gap-2">
             <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
               RAG Productivity Coach
             </span>
-            <span class="text-xs text-gray-400">Generated from actual watch history</span>
+            <span id="planTimestamp" class="text-xs text-gray-400">Customized roadmap</span>
           </div>
-          <h2 class="text-xl font-bold text-white mt-1">Today's Focus Defense & Action Roadmap</h2>
+          <h2 id="planHeading" class="text-xl font-bold text-white mt-1">Today's Focus Defense & Action Roadmap</h2>
         </div>
         <div class="flex items-center gap-2 max-w-md w-full">
-          <input type="text" id="goalInput" placeholder="Set today's primary goal (e.g. Build backend API)..." 
+          <input type="text" id="goalInput" onkeydown="if(event.key==='Enter') generatePlan()" placeholder="Enter your goal (e.g. Finish my Homework, Build API)..." 
                  class="flex-1 bg-gray-800 border border-gray-700 text-sm text-gray-100 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <button onclick="generatePlan()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition whitespace-nowrap">
+          <button onclick="generatePlan()" id="generatePlanBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition whitespace-nowrap shadow-sm">
             Generate Plan
           </button>
         </div>
+      </div>
+
+      <!-- Summary banner -->
+      <div id="planSummaryBanner" class="mt-4 px-4 py-2.5 rounded-lg bg-gray-800/80 border border-gray-700/60 text-xs text-indigo-200 hidden flex items-center justify-between">
+        <span id="planSummaryText"></span>
       </div>
 
       <!-- Suggestions Grid with Embedded Links -->
@@ -184,7 +194,7 @@
           <p class="text-xs text-gray-400">Search by topic, intention, or distraction pattern</p>
         </div>
         <div class="flex items-center gap-2 max-w-sm w-full">
-          <input type="text" id="ragSearchInput" onkeydown="if(event.key==='Enter') doSearch()" placeholder="e.g. 'gaming rabbit hole', 'python tutorial'..." 
+          <input type="text" id="ragSearchInput" onkeydown="if(event.key==='Enter') doSearch()" placeholder="e.g. 'homework', 'shorts', 'python'..." 
                  class="flex-1 bg-gray-800 border border-gray-700 text-sm text-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
           <button onclick="doSearch()" class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3.5 py-1.5 rounded-lg transition">
             Search
@@ -197,8 +207,11 @@
     <!-- Detailed History Table -->
     <div class="glass-card rounded-2xl p-6 shadow-sm">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="text-base font-bold text-white">Daily Watch Log</h3>
-        <span id="logCountBadge" class="text-xs px-2 py-1 rounded bg-gray-800 text-gray-300">0 records</span>
+        <div>
+          <h3 class="text-base font-bold text-white">Daily Watch Log</h3>
+          <p class="text-xs text-gray-400">YouTube Shorts are by default tagged as <span class="text-rose-400 font-semibold">Distraction</span></p>
+        </div>
+        <span id="logCountBadge" class="text-xs px-2.5 py-1 rounded-md bg-gray-800 text-gray-300 font-mono">0 records</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-gray-300">
@@ -256,6 +269,7 @@
       document.getElementById("kpiVideoCount").textContent = `across ${data.total_videos} videos and ${data.total_searches} searches`;
       document.getElementById("kpiDistractionPct").textContent = `${data.distractive_pct}%`;
       document.getElementById("kpiDistractionFmt").textContent = `${data.distractive_fmt} in distraction categories`;
+      document.getElementById("kpiShortsCount").textContent = `⚠️ ${data.total_shorts || 0} YouTube Shorts (Distraction)`;
       document.getElementById("kpiProductiveFmt").textContent = data.productive_fmt || "0m";
       document.getElementById("kpiProductivePct").textContent = `${data.productive_pct}% productive focus ratio`;
       document.getElementById("kpiPeakHour").textContent = data.peak_distraction_hour || "None";
@@ -284,9 +298,9 @@
           labels: labels,
           datasets: [
             {
-              label: 'Distraction Hours',
+              label: 'Distraction Hours (Shorts & Entertainment)',
               data: distHours || new Array(24).fill(0),
-              backgroundColor: 'rgba(239, 68, 68, 0.75)',
+              backgroundColor: 'rgba(239, 68, 68, 0.8)',
               borderRadius: 4
             },
             {
@@ -318,9 +332,15 @@
       const labels = (categories || []).map(c => c.category);
       const dataValues = (categories || []).map(c => Math.round(c.duration_sec / 60));
 
-      const colors = [
-        '#ef4444', '#f97316', '#eab308', '#10b981', '#06b6d4', '#6366f1', '#a855f7', '#ec4899', '#64748b'
-      ];
+      // Color mapping giving Shorts an unmistakable bright crimson red
+      const colors = labels.map(label => {
+        if (label === 'Shorts') return '#dc2626';
+        if (label === 'Gaming') return '#f97316';
+        if (label === 'Comedy' || label === 'Entertainment') return '#ef4444';
+        if (label === 'Science & Technology' || label === 'Education' || label === 'Productivity') return '#10b981';
+        if (label === 'Music') return '#06b6d4';
+        return '#64748b';
+      });
 
       categoryChartInstance = new Chart(ctx, {
         type: 'doughnut',
@@ -328,7 +348,7 @@
           labels: labels.length ? labels : ['No Data'],
           datasets: [{
             data: dataValues.length ? dataValues : [1],
-            backgroundColor: colors.slice(0, Math.max(labels.length, 1)),
+            backgroundColor: colors.length ? colors : ['#374151'],
             borderWidth: 2,
             borderColor: '#111827'
           }]
@@ -353,26 +373,34 @@
       }
 
       tbody.innerHTML = records.map(r => {
-        const cat = r.category || 'General';
+        const urlStr = r.url || '';
+        const titleLower = (r.title || '').toLowerCase();
+        const isShort = r.is_shorts || r.type === 'shorts' || urlStr.includes('/shorts/') || titleLower.includes('#shorts') || r.category === 'Shorts';
+
+        let cat = isShort ? 'Shorts' : (r.category || 'General');
         let badgeColor = 'bg-gray-800 text-gray-300';
         let typeBadge = 'Neutral';
 
-        if (['Gaming', 'Entertainment', 'Comedy', 'Shorts'].includes(cat)) {
-          badgeColor = 'bg-rose-950/60 text-rose-400 border border-rose-800/40';
+        if (isShort) {
+          badgeColor = 'bg-rose-950 text-rose-300 font-bold border border-rose-700/80';
+          typeBadge = 'Distraction (Shorts)';
+        } else if (['Gaming', 'Entertainment', 'Comedy', 'Memes'].includes(cat)) {
+          badgeColor = 'bg-rose-950/70 text-rose-400 border border-rose-800/50';
           typeBadge = 'Distraction';
         } else if (['Education', 'Science & Technology', 'Productivity'].includes(cat)) {
-          badgeColor = 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40';
+          badgeColor = 'bg-emerald-950/70 text-emerald-400 border border-emerald-800/50';
           typeBadge = 'Productive';
         }
 
+        const shortsBadge = isShort ? `<span class="px-1.5 py-0.5 mr-2 rounded text-[10px] bg-red-900/80 text-red-200 font-bold border border-red-700">SHORTS</span>` : '';
         const visitTime = r.visited_at ? new Date(r.visited_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--';
-        const urlLink = r.url ? `<a href="${r.url}" target="_blank" class="hover:text-indigo-400 transition underline underline-offset-2">${escapeHtml(r.title)}</a>` : escapeHtml(r.title);
+        const urlLink = r.url ? `<a href="${r.url}" target="_blank" class="hover:text-indigo-400 transition underline underline-offset-2">${shortsBadge}${escapeHtml(r.title)}</a>` : `${shortsBadge}${escapeHtml(r.title)}`;
 
         return `
           <tr class="hover:bg-gray-800/40 transition">
             <td class="px-4 py-3 font-medium text-gray-200 max-w-sm truncate">${urlLink}</td>
             <td class="px-4 py-3 text-gray-400 truncate max-w-xs">${escapeHtml(r.channel || 'Unknown')}</td>
-            <td class="px-4 py-3 text-gray-300">${cat}</td>
+            <td class="px-4 py-3 text-gray-300">${cat === 'Shorts' ? '<span class="text-rose-400 font-bold">Shorts</span>' : cat}</td>
             <td class="px-4 py-3"><span class="px-2 py-0.5 text-xs rounded-full ${badgeColor}">${typeBadge}</span></td>
             <td class="px-4 py-3 text-gray-300 font-mono text-xs">${r.duration_fmt || '0m'}</td>
             <td class="px-4 py-3 text-gray-400 text-xs">${visitTime}</td>
@@ -383,45 +411,112 @@
 
     async function loadPlan(date = "") {
       const container = document.getElementById("suggestionsContainer");
-      const goal = document.getElementById("goalInput").value.trim();
+      const goalInput = document.getElementById("goalInput");
+      const generateBtn = document.getElementById("generatePlanBtn");
+      const goal = goalInput.value.trim();
+
+      // Visual feedback: show skeleton loader so screen is NEVER frozen
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Generating Plan...`;
+
+      container.innerHTML = `
+        <div class="col-span-2 space-y-4">
+          <div class="glass-card rounded-xl p-6 pulse-skeleton space-y-3">
+            <div class="h-4 bg-gray-700/60 rounded w-1/4"></div>
+            <div class="h-6 bg-gray-700/40 rounded w-3/4"></div>
+            <div class="h-4 bg-gray-700/30 rounded w-full"></div>
+            <div class="h-4 bg-gray-700/30 rounded w-5/6"></div>
+          </div>
+          <div class="glass-card rounded-xl p-6 pulse-skeleton space-y-3">
+            <div class="h-4 bg-gray-700/60 rounded w-1/4"></div>
+            <div class="h-6 bg-gray-700/40 rounded w-3/4"></div>
+            <div class="h-4 bg-gray-700/30 rounded w-full"></div>
+          </div>
+        </div>
+      `;
+
       const query = new URLSearchParams();
       if (date) query.set("date", date);
       if (goal) query.set("goal", goal);
 
-      const plan = await fetchJSON(`/api/plan?${query.toString()}`);
-      if (!plan || !plan.suggestions || plan.suggestions.length === 0) {
-        container.innerHTML = `<div class="col-span-2 text-center text-gray-500 py-6">No suggestions generated yet.</div>`;
-        return;
+      try {
+        const plan = await fetchJSON(`/api/plan?${query.toString()}`);
+
+        // Update Roadmap Header and Banner
+        const heading = document.getElementById("planHeading");
+        const banner = document.getElementById("planSummaryBanner");
+        const bannerText = document.getElementById("planSummaryText");
+        const timestamp = document.getElementById("planTimestamp");
+
+        if (plan.user_goal && plan.user_goal !== "Deep work and focused learning") {
+          heading.innerHTML = `Action Roadmap: <span class="text-indigo-400">"${escapeHtml(plan.user_goal)}"</span>`;
+        } else {
+          heading.textContent = "Today's Focus Defense & Action Roadmap";
+        }
+
+        if (plan.summary) {
+          banner.classList.remove("hidden");
+          bannerText.textContent = plan.summary;
+        }
+        if (plan.generated_at) {
+          timestamp.textContent = `Generated at ${plan.generated_at}`;
+        }
+
+        if (!plan || !plan.suggestions || plan.suggestions.length === 0) {
+          container.innerHTML = `<div class="col-span-2 text-center text-gray-500 py-6">No suggestions generated yet.</div>`;
+          return;
+        }
+
+        container.innerHTML = plan.suggestions.map((s, idx) => {
+          const linksHtml = (s.links || []).map(l => `
+            <a href="${l.url}" target="_blank" rel="noopener noreferrer" 
+               class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900 border border-indigo-800/50 transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              <span>${escapeHtml(l.label)}</span>
+            </a>
+          `).join(' ');
+
+          return `
+            <div class="glass-card glass-card-hover rounded-xl p-5 flex flex-col justify-between border-t-2 border-t-indigo-500/50">
+              <div>
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs px-2.5 py-0.5 rounded font-semibold bg-gray-800 text-indigo-300 border border-gray-700">${escapeHtml(s.badge)}</span>
+                  <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+                    <input type="checkbox" onchange="toggleCardComplete(this)" class="rounded bg-gray-800 border-gray-700 text-indigo-600 focus:ring-0">
+                    <span>Mark Complete</span>
+                  </label>
+                </div>
+                <h4 class="text-base font-bold text-white mt-2.5">${escapeHtml(s.title)}</h4>
+                <p class="text-xs text-rose-300/95 mt-1.5 font-medium leading-relaxed">${escapeHtml(s.diagnosis)}</p>
+                <div class="mt-2.5 p-3 rounded-lg bg-gray-900/70 border border-gray-800 text-xs text-gray-200 leading-relaxed">
+                  <span class="font-bold text-indigo-400 block mb-1">Execution Action:</span>
+                  ${escapeHtml(s.prescription)}
+                </div>
+              </div>
+              <div class="mt-4 pt-3 border-t border-gray-800">
+                <span class="text-[10px] text-gray-400 block mb-1.5 uppercase tracking-wider font-semibold">Embedded Resources:</span>
+                <div class="flex flex-wrap gap-2">
+                  ${linksHtml}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="col-span-2 text-center text-rose-400 py-6">Error generating roadmap: ${err.message}</div>`;
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "Generate Plan";
       }
+    }
 
-      container.innerHTML = plan.suggestions.map(s => {
-        const linksHtml = (s.links || []).map(l => `
-          <a href="${l.url}" target="_blank" rel="noopener noreferrer" 
-             class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium bg-indigo-950/60 text-indigo-300 hover:bg-indigo-900 border border-indigo-800/50 transition">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-            <span>${escapeHtml(l.label)}</span>
-          </a>
-        `).join(' ');
-
-        return `
-          <div class="glass-card glass-card-hover rounded-xl p-5 flex flex-col justify-between">
-            <div>
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-xs px-2 py-0.5 rounded font-semibold bg-gray-800 text-indigo-300">${escapeHtml(s.badge)}</span>
-              </div>
-              <h4 class="text-base font-bold text-white mt-2">${escapeHtml(s.title)}</h4>
-              <p class="text-xs text-rose-300/90 mt-1.5 font-medium">${escapeHtml(s.diagnosis)}</p>
-              <p class="text-xs text-gray-300 mt-2 leading-relaxed">${escapeHtml(s.prescription)}</p>
-            </div>
-            <div class="mt-4 pt-3 border-t border-gray-800">
-              <span class="text-[10px] text-gray-400 block mb-1.5 uppercase tracking-wider font-semibold">Recommended Resources:</span>
-              <div class="flex flex-wrap gap-2">
-                ${linksHtml}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
+    function toggleCardComplete(checkbox) {
+      const card = checkbox.closest('.glass-card');
+      if (checkbox.checked) {
+        card.classList.add('opacity-50', 'line-through');
+      } else {
+        card.classList.remove('opacity-50', 'line-through');
+      }
     }
 
     function generatePlan() {
@@ -471,10 +566,13 @@
       resultsDiv.innerHTML = res.map(item => {
         const m = item.metadata || {};
         const score = Math.round((item.score || 0) * 100);
+        const isShort = m.is_shorts || (m.url && m.url.includes('/shorts/')) || m.category === 'Shorts';
+        const badge = isShort ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-950 text-rose-300 font-bold border border-rose-800">SHORTS</span>` : '';
+
         return `
           <div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700/60 flex items-center justify-between text-xs">
             <div class="space-y-0.5 max-w-xl truncate">
-              <span class="font-semibold text-gray-100">${escapeHtml(m.title || 'Untitled')}</span>
+              <span class="font-semibold text-gray-100">${badge} ${escapeHtml(m.title || 'Untitled')}</span>
               <span class="text-gray-400 ml-2">Channel: ${escapeHtml(m.channel || 'Unknown')}</span>
               <span class="text-gray-400 ml-2">Category: ${escapeHtml(m.category || 'General')}</span>
             </div>

@@ -67,25 +67,42 @@ class YouTubeAPIClient:
         # Enrich records
         enriched = []
         for record in records:
+            url = record.get("url", "")
+            title = record.get("title", "")
+            is_short = bool(
+                record.get("is_shorts") or
+                "/shorts/" in url or 
+                "#shorts" in title.lower() or 
+                "#short" in title.lower() or
+                record.get("type") == "shorts"
+            )
+            record["is_shorts"] = is_short
+            if is_short:
+                record["type"] = "shorts"
+
             vid = record.get("video_id")
             if vid and vid in api_data:
                 meta = api_data[vid]
                 record["duration_sec"] = meta["duration_sec"]
                 record["duration_fmt"] = self._format_duration(meta["duration_sec"])
-                record["category"] = meta["category"]
+                record["category"] = "Shorts" if is_short else meta["category"]
                 record["channel"] = meta["channel"]
                 record["tags"] = meta["tags"]
                 record["description"] = meta["description"]
             else:
-                # Apply fallback inference if not already populated
-                if not record.get("category"):
-                    inferred_cat = self._infer_category_from_title(record.get("title", ""), record.get("search_query"))
+                # Apply category inference
+                if is_short:
+                    record["category"] = "Shorts"
+                elif not record.get("category"):
+                    inferred_cat = self._infer_category_from_title(title, record.get("search_query"), url=url)
                     record["category"] = inferred_cat
 
                 if not record.get("duration_sec"):
-                    # Use browser duration or reasonable default (12 mins)
                     browser_sec = record.get("browser_recorded_duration_sec", 0)
-                    record["duration_sec"] = browser_sec if browser_sec > 30 else 720
+                    if is_short:
+                        record["duration_sec"] = min(browser_sec, 60) if browser_sec > 5 else 45
+                    else:
+                        record["duration_sec"] = browser_sec if browser_sec > 30 else 720
                     record["duration_fmt"] = self._format_duration(record["duration_sec"])
 
                 if not record.get("channel"):
@@ -94,6 +111,10 @@ class YouTubeAPIClient:
                     record["tags"] = []
                 if not record.get("description"):
                     record["description"] = ""
+
+            # Ensure Shorts are always categorized as Shorts
+            if is_short:
+                record["category"] = "Shorts"
 
             enriched.append(record)
 
@@ -134,8 +155,11 @@ class YouTubeAPIClient:
 
         return metadata
 
-    def _infer_category_from_title(self, title: str, query: Optional[str] = None) -> str:
+    def _infer_category_from_title(self, title: str, query: Optional[str] = None, url: str = "") -> str:
         """Rule-based NLP classifier when YouTube API key is missing."""
+        if "/shorts/" in (url or "") or "#shorts" in (title or "").lower() or "#short" in (title or "").lower():
+            return "Shorts"
+
         text = f"{title} {query or ''}".lower()
 
         # Distraction / Gaming

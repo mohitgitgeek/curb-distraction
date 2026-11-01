@@ -46,6 +46,18 @@ class YouTubeDistractionService:
                 description TEXT
             )
         """)
+        # Immediate migration: Ensure all YouTube Shorts are categorized as 'Shorts' and marked as type 'shorts'
+        cursor.execute("""
+            UPDATE records 
+            SET category = 'Shorts', type = 'shorts'
+            WHERE url LIKE '%/shorts/%' OR title LIKE '%#shorts%' OR title LIKE '%#short%'
+        """)
+        # For Shorts that had excessive default duration, normalize to 45s
+        cursor.execute("""
+            UPDATE records 
+            SET duration_sec = 45, duration_fmt = '45s'
+            WHERE (category = 'Shorts' OR url LIKE '%/shorts/%') AND (duration_sec > 60 OR duration_sec = 0)
+        """)
         conn.commit()
         conn.close()
 

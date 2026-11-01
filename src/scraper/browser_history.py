@@ -166,9 +166,20 @@ class BrowserHistoryScraper:
                 if visit_duration and visit_duration > 0:
                     duration_sec = int(visit_duration / 1_000_000)
 
-                record_type = "video" if video_id else "search"
+                is_short = bool(
+                    "/shorts/" in url or 
+                    (title and ("#shorts" in title.lower() or "#short" in title.lower()))
+                )
+                if is_short:
+                    record_type = "shorts"
+                elif video_id:
+                    record_type = "video"
+                else:
+                    record_type = "search"
+
                 results.append({
                     "type": record_type,
+                    "is_shorts": is_short,
                     "url": url,
                     "video_id": video_id,
                     "search_query": search_query,
