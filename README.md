@@ -25,7 +25,7 @@ Built with **Browser History Scraping**, **YouTube Data API v3**, **Vector Embed
 
 4. **Vector Embeddings & RAG Engine**:
    - Generates high-dimensional vector embeddings for all watched titles, categories, and searches.
-   - Built-in dual provider: Google Gemini Embeddings (`text-embedding-004`) with an automatic fallback to an offline normalized subword vectorizer.
+   - Built-in dual provider: Google Gemini Embeddings (`gemini-embedding-001`) with an automatic fallback to an offline normalized subword vectorizer.
    - Semantic retrieval to query distraction patterns and find tutorials.
 
 5. **RAG Productivity Coach with Embedded Links**:
@@ -61,7 +61,7 @@ Copy `.env.example` to `.env` and configure your keys if desired:
 # Optional: YouTube Data API v3 key
 YOUTUBE_API_KEY=your_youtube_api_key_here
 
-# Optional: Gemini API Key for text-embedding-004
+# Optional: Gemini API Key for gemini-embedding-001
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 *(Note: FocusCurb operates 100% offline out-of-the-box with heuristic categorization and local vector embeddings if no keys are provided!)*
@@ -99,6 +99,8 @@ python run_cli.py search "programming tutorials and system design"
 # 4. Scan and sync local browser history:
 python run_cli.py sync --days 14
 ```
+
+Search ranks topic matches alongside vector similarity and avoids repeating the same video in the results.
 
 ---
 

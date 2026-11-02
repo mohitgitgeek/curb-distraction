@@ -10,18 +10,34 @@ class EmbeddingProvider:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or GEMINI_API_KEY
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
         self._vocab = {}
         self._idf = {}
         self._dimension = 128
 
     def embed_query(self, text: str) -> List[float]:
         """Embed a single search query or statement."""
-        vectors = self.embed_batch([text])
+        vectors = self._embed_batch([text], task_type="RETRIEVAL_QUERY")
         return vectors[0] if vectors else [0.0] * self._dimension
+
+    def embed_query_local(self, text: str) -> List[float]:
+        """Embed a query with the local vectorizer, independent of API settings."""
+        vectors = self._local_dense_vectorize([text])
+        return vectors[0] if vectors else [0.0] * self._dimension
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed indexed documents for semantic retrieval."""
+        return self._embed_batch(texts, task_type="RETRIEVAL_DOCUMENT")
 
     def embed_batch(self, texts: List[str]) -> List[List[float]]:
         """Embed a list of text strings."""
+        return self._embed_batch(texts)
+
+    def _embed_batch(
+        self,
+        texts: List[str],
+        task_type: Optional[str] = None,
+    ) -> List[List[float]]:
         if not texts:
             return []
 
@@ -30,7 +46,7 @@ class EmbeddingProvider:
             try:
                 embeddings = []
                 for text in texts:
-                    emb = self._call_gemini_embedding(text)
+                    emb = self._call_gemini_embedding(text, task_type=task_type)
                     embeddings.append(emb)
                 return embeddings
             except Exception as e:
@@ -39,12 +55,18 @@ class EmbeddingProvider:
         # Fallback: High quality normalized dense subword vectorizer
         return self._local_dense_vectorize(texts)
 
-    def _call_gemini_embedding(self, text: str) -> List[float]:
+    def _call_gemini_embedding(
+        self,
+        text: str,
+        task_type: Optional[str] = None,
+    ) -> List[float]:
         headers = {"Content-Type": "application/json"}
         payload = {
-            "model": "models/text-embedding-004",
+            "model": "models/gemini-embedding-001",
             "content": {"parts": [{"text": text[:1000]}]}
         }
+        if task_type:
+            payload["taskType"] = task_type
         resp = requests.post(f"{self.gemini_url}?key={self.api_key}", json=payload, headers=headers, timeout=10)
         if resp.status_code == 200:
             data = resp.json()

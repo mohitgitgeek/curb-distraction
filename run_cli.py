@@ -27,7 +27,7 @@ def main():
     plan_parser.add_argument("--date", type=str, default="", help="Date in YYYY-MM-DD format")
 
     # Command: search (RAG)
-    search_parser = subparsers.add_parser("search", help="Perform semantic vector RAG search across watch history")
+    search_parser = subparsers.add_parser("search", help="Search watched history by topic and semantic similarity")
     search_parser.add_argument("query", type=str, help="Search query or topic description")
     search_parser.add_argument("--top", type=int, default=5, help="Number of results to return")
 
