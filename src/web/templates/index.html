@@ -157,6 +157,7 @@
         <div class="text-center py-8 text-gray-400 col-span-2">Loading coaching recommendations...</div>
       </div>
     </div>
+    </div>
 
     <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -427,31 +428,6 @@
 
       // ensure roadmap section is visible before showing loader
       roadmapSection.style.display = 'block';
-
-      // Visual feedback: show skeleton loader so screen is NEVER frozen
-      generateBtn.disabled = true;
-      generateBtn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Generating Plan...`;
-
-      container.innerHTML = `
-        <div class="col-span-2 space-y-4">
-          <div class="glass-card rounded-xl p-6 pulse-skeleton space-y-3">
-            <div class="h-4 bg-gray-700/60 rounded w-1/4"></div>
-            <div class="h-6 bg-gray-700/40 rounded w-3/4"></div>
-            <div class="h-4 bg-gray-700/30 rounded w-full"></div>
-            <div class="h-4 bg-gray-700/30 rounded w-5/6"></div>
-          </div>
-          <div class="glass-card rounded-xl p-6 pulse-skeleton space-y-3">
-            <div class="h-4 bg-gray-700/60 rounded w-1/4"></div>
-            <div class="h-6 bg-gray-700/40 rounded w-3/4"></div>
-            <div class="h-4 bg-gray-700/30 rounded w-full"></div>
-          </div>
-        </div>
-      `;
-
-      const container = document.getElementById("suggestionsContainer");
-      const goalInput = document.getElementById("goalInput");
-      const generateBtn = document.getElementById("generatePlanBtn");
-      const goal = goalInput.value.trim();
 
       // Visual feedback: show skeleton loader so screen is NEVER frozen
       generateBtn.disabled = true;
