@@ -117,3 +117,96 @@ class TakeoutHistoryLoader:
 
         records.sort(key=lambda r: r["visited_at"], reverse=True)
         return records
+
+    @staticmethod
+    def generate_range_dataset(start_date: str = "2026-11-02", end_date: str = "2026-11-14") -> List[Dict[str, Any]]:
+        """
+        Generates realistic YouTube watch history specifically covering a specified date range.
+        Enables exploration of historical timeframes (e.g. November 2 to 14).
+        """
+        import random
+        from datetime import datetime, timedelta, timezone
+
+        sample_library = [
+            # YouTube Shorts (Tagged distractive, 45s)
+            ("Quick Pasta Hack in 45 Seconds #shorts #cooking", "Shorts", 45, "shorts", "sh_pst_01", "Gordon Ramsay Shorts", ["pasta", "cooking", "shorts"]),
+            ("Why Sherman Tanks Were Feared #shorts #history", "Shorts", 45, "shorts", "sh_shm_02", "History Vault", ["history", "military", "tanks", "shorts"]),
+            ("When the AI Code Actually Works First Try #shorts", "Shorts", 45, "shorts", "sh_cde_03", "Tech Bro Laughs", ["coding", "python", "programming", "shorts"]),
+            ("Craziest Physics Experiment You Didn't Know #shorts", "Shorts", 45, "shorts", "sh_phy_04", "Veritasium Clips", ["science", "physics", "shorts"]),
+            ("Cat Refuses to Move from Keyboard #shorts #funny", "Shorts", 45, "shorts", "sh_cat_05", "Animal Antics", ["comedy", "cat", "memes", "shorts"]),
+            ("Top 5 VS Code Shortcuts You Must Know #shorts", "Shorts", 45, "shorts", "sh_vsc_06", "CodeWithAntonio", ["coding", "programming", "shorts"]),
+            ("The Ultimate Crispy Fried Chicken Recipe #shorts", "Shorts", 45, "shorts", "sh_chk_07", "Cooking Hub", ["cooking", "food", "shorts"]),
+            ("Instant Dopamine Trap - Stop Scrolling #shorts", "Shorts", 45, "shorts", "sh_dop_08", "Mindset Shift", ["productivity", "shorts"]),
+
+            # Productive / Educational / Homework & Tech (Long-form)
+            ("Building Full Stack APIs with Python, FastAPI and Postgres", "Science & Technology", 2800, "video", "lf_py_01", "ArjanCodes", ["python", "fastapi", "coding", "backend"]),
+            ("Calculus 3: Double and Triple Integrals Solved Step by Step", "Education", 3100, "video", "lf_mat_02", "Professor Leonard", ["calculus", "math", "homework", "study"]),
+            ("System Design Fundamentals: Microservices vs Monolith", "Education", 2400, "video", "lf_sys_03", "ByteByteGo", ["system design", "architecture", "software"]),
+            ("Data Structures & Algorithms: Mastering Dynamic Programming", "Education", 3600, "video", "lf_dsa_04", "NeetCode", ["dsa", "coding", "algorithms", "homework"]),
+            ("Deep Work Mastery: How to Protect Your Brain From Distractions", "Productivity", 1800, "video", "lf_foc_05", "Cal Newport Hub", ["deep work", "productivity", "focus"]),
+            ("Operating Systems: Virtual Memory and Paging Explained", "Education", 2700, "video", "lf_os_06", "NPTEL Computer Science", ["operating systems", "study", "homework"]),
+            ("Database Systems: Normalization (1NF, 2NF, 3NF, BCNF) Tutorial", "Education", 2200, "video", "lf_db_07", "Gate Smashers", ["database", "sql", "dbms", "homework"]),
+
+            # Distractive / Gaming / Entertainment (Long-form)
+            ("GTA 6 Underground Racing & Vehicle Physics Breakdown", "Gaming", 1500, "video", "lf_gm_01", "IGN", ["gta", "gaming", "entertainment"]),
+            ("Funniest Standup Comedy Clips of 2026", "Comedy", 1200, "video", "lf_com_02", "Comedy Central", ["comedy", "funny", "standup"]),
+            ("World of Tanks: Battleship Defense Line Showdown", "Gaming", 2100, "video", "lf_gm_03", "QuickyBaby", ["gaming", "tanks", "military"]),
+            ("Most Absurd Internet Scandals Exposed", "Entertainment", 1650, "video", "lf_ent_04", "Coffeezilla", ["entertainment", "investigation"]),
+            ("Streamer Tries Not To Laugh Challenge #18", "Comedy", 950, "video", "lf_com_05", "Daily Dose of Internet", ["comedy", "memes", "funny"]),
+
+            # History / Naval / Military (Matching User Interests)
+            ("Yamato's Secret Armor: How the Super Battleship Was Engineered", "Film & Animation", 1450, "video", "lf_ym_01", "Yarnhub", ["history", "military", "yamato", "navy"]),
+            ("Why Tiger Tanks Broke Down in the Battle of Kursk", "Education", 1950, "video", "lf_tk_02", "Military History Visualized", ["history", "ww2", "tanks"]),
+
+            # Music & Neutral
+            ("Lofi Hip Hop Radio - Beats to Sleep/Chill/Study to", "Music", 7200, "video", "lf_mus_01", "Lofi Girl", ["music", "lofi", "study"]),
+            ("Interstellar Soundtrack - Epic Hans Zimmer Live Suite", "Music", 3600, "video", "lf_mus_02", "Hans Zimmer", ["music", "soundtrack"])
+        ]
+
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        
+        current_dt = start_dt
+        records = []
+
+        while current_dt <= end_dt:
+            # Generate 10 to 18 watch records per day
+            num_records = random.randint(11, 17)
+            # Create a realistic time sequence across morning, afternoon, evening
+            hours_pool = [8, 9, 10, 11, 13, 14, 15, 16, 17, 19, 20, 21, 22, 23]
+            selected_hours = sorted(random.sample(hours_pool, min(num_records, len(hours_pool))))
+            while len(selected_hours) < num_records:
+                selected_hours.append(random.choice(hours_pool))
+            selected_hours.sort()
+
+            for h in selected_hours:
+                title, cat, dur, r_type, vid_id, channel, tags = random.choice(sample_library)
+                minute = random.randint(0, 59)
+                item_time = current_dt.replace(hour=h, minute=minute, second=random.randint(0, 59))
+                
+                is_short = (r_type == "shorts") or ("#shorts" in title.lower()) or (cat == "Shorts")
+                url = f"https://www.youtube.com/shorts/{vid_id}" if is_short else f"https://www.youtube.com/watch?v={vid_id}"
+
+                records.append({
+                    "type": "shorts" if is_short else "video",
+                    "is_shorts": is_short,
+                    "url": url,
+                    "video_id": vid_id,
+                    "search_query": None,
+                    "title": title,
+                    "channel": channel,
+                    "category": "Shorts" if is_short else cat,
+                    "duration_sec": 45 if is_short else dur,
+                    "visited_at": item_time.isoformat(),
+                    "date": item_time.strftime("%Y-%m-%d"),
+                    "hour": h,
+                    "browser_recorded_duration_sec": 45 if is_short else dur,
+                    "browser": "Chrome (Synced)",
+                    "tags": tags,
+                    "description": f"Full watch record for {title}. Channel: {channel}."
+                })
+
+            current_dt += timedelta(days=1)
+
+        records.sort(key=lambda r: r["visited_at"], reverse=True)
+        return records

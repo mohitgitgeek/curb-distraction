@@ -10,7 +10,7 @@ class EmbeddingProvider:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or GEMINI_API_KEY
-        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
+        self.gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
         self._vocab = {}
         self._idf = {}
         self._dimension = 128
@@ -62,7 +62,7 @@ class EmbeddingProvider:
     ) -> List[float]:
         headers = {"Content-Type": "application/json"}
         payload = {
-            "model": "models/gemini-embedding-001",
+            "model": "models/text-embedding-004",
             "content": {"parts": [{"text": text[:1000]}]}
         }
         if task_type:
@@ -73,16 +73,16 @@ class EmbeddingProvider:
             return data.get("embedding", {}).get("values", [])
         raise RuntimeError(f"Gemini API Error {resp.status_code}: {resp.text}")
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> tuple[List[str], List[str]]:
         cleaned = re.sub(r"[^\w\s]", " ", text.lower())
-        tokens = cleaned.split()
+        tokens = [t for t in cleaned.split() if len(t) >= 2]
         # Add character tri-grams for subword matching (e.g. 'code' -> 'cod', 'ode')
         trigrams = []
         for tok in tokens:
             if len(tok) >= 3:
                 for i in range(len(tok) - 2):
                     trigrams.append(tok[i:i+3])
-        return tokens + trigrams
+        return tokens, trigrams
 
     def _local_dense_vectorize(self, texts: List[str]) -> List[List[float]]:
         """Hashes n-grams and tokens into a dense normalized fixed-size embedding vector."""
@@ -90,21 +90,29 @@ class EmbeddingProvider:
         dim = self._dimension
 
         for text in texts:
-            tokens = self._tokenize(text)
+            words, trigrams = self._tokenize(text)
             vec = np.zeros(dim, dtype=np.float32)
-            if not tokens:
+            if not words and not trigrams:
                 vectors.append(vec.tolist())
                 continue
 
-            for tok in tokens:
-                # Deterministic polynomial hash
+            for w in words:
+                # Deterministic polynomial hash for full word tokens (higher weight)
                 h = 0
-                for ch in tok:
+                for ch in w:
                     h = (h * 31 + ord(ch)) % 0xFFFFFFFF
                 idx = h % dim
-                # Direction hash to reduce collisions
                 sign = 1.0 if ((h >> 8) & 1) == 0 else -1.0
-                vec[idx] += sign
+                vec[idx] += sign * 2.0
+
+            for tri in trigrams:
+                # Subword trigram hash (lower weight for tie-breaking)
+                h = 0
+                for ch in tri:
+                    h = (h * 31 + ord(ch)) % 0xFFFFFFFF
+                idx = h % dim
+                sign = 1.0 if ((h >> 8) & 1) == 0 else -1.0
+                vec[idx] += sign * 0.4
 
             # L2 normalize
             norm = np.linalg.norm(vec)

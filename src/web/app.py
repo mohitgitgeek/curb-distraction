@@ -55,6 +55,13 @@ def api_sync():
     count = service.sync_history(days_back=days_back)
     return jsonify({"status": "success", "synced_count": count})
 
+@app.route("/api/seed-range", methods=["POST"])
+def api_seed_range():
+    start_date = request.json.get("start", "2026-11-02") if request.is_json else "2026-11-02"
+    end_date = request.json.get("end", "2026-11-14") if request.is_json else "2026-11-14"
+    count = service.seed_date_range(start_date=start_date, end_date=end_date)
+    return jsonify({"status": "success", "seeded_count": count, "range": f"{start_date} to {end_date}"})
+
 def start_server(host="127.0.0.1", port=5000, debug=False):
     print(f"[FocusCurb] Starting Dashboard on http://{host}:{port}")
     app.run(host=host, port=port, debug=debug)

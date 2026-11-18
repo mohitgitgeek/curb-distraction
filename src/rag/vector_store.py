@@ -3,29 +3,31 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
-from src.config import VECTOR_INDEX_PATH
+from src.config import VECTOR_INDEX_PATH, DISTRACTIVE_CATEGORIES, PRODUCTIVE_CATEGORIES
 from src.rag.embeddings import EmbeddingProvider
 
 SEARCH_CONCEPTS = {
-    "programming": ("programming", "coding", "code", "software", "developer", "development"),
-    "tutorials": (
-        "tutorial",
-        "tutorials",
-        "lesson",
-        "lessons",
-        "course",
-        "courses",
-        "walkthrough",
-        "walkthroughs",
-    ),
-    "system design": (
-        "system design",
-        "software architecture",
-        "distributed systems",
-        "architecture",
-        "scalability",
-        "backend design",
-    ),
+    "programming": ("programming", "coding", "software development", "software engineering"),
+    "python": ("python", "python3", "py"),
+    "javascript": ("javascript", "typescript", "js", "ts", "node js", "nodejs"),
+    "tutorials": ("tutorial", "tutorials", "lesson", "lessons", "course", "courses", "how to", "guide", "walkthrough"),
+    "system design": ("system design", "software architecture", "distributed systems"),
+    "distraction": ("distraction", "distractive", "distracted", "time waste", "procrastination", "mindless", "binge"),
+    "shorts": ("shorts", "short", "#shorts", "reels"),
+    "productivity": ("productivity", "productive", "focus", "deep work", "time management"),
+    "study": ("study", "studying", "homework", "assignment", "exam", "revision", "coursework"),
+    "education": ("education", "educational", "lecture", "academic"),
+    "music": ("music", "song", "songs", "soundtrack", "audio", "ost", "album", "remix"),
+    "gaming": ("gaming", "game", "games", "gameplay", "gamer", "playthrough"),
+    "war": ("war", "warfare", "military", "battle"),
+    "navy": ("navy", "naval", "battleship", "warship", "yamato"),
+    "tanks": ("tank", "tanks", "panzer", "sherman"),
+    "aviation": ("aviation", "aircraft", "fighter jet", "plane", "pilot"),
+    "food": ("food", "meal", "dish", "dishes"),
+    "cooking": ("cooking", "cook", "recipe", "recipes", "chef", "kitchen"),
+    "pasta": ("pasta", "lasagna", "aglio e olio"),
+    "curry": ("curry",),
+    "news_politics": ("news", "politics", "political", "media", "report"),
 }
 STOP_WORDS = {"a", "an", "and", "for", "in", "of", "on", "or", "the", "to", "with"}
 
@@ -161,14 +163,28 @@ class VectorStore:
             if category and doc["metadata"].get("category") != category:
                 continue
             metadata = doc["metadata"]
+            cat = str(metadata.get("category", "") or "")
+            is_short = bool(metadata.get("is_shorts") or cat == "Shorts" or metadata.get("type") == "shorts")
+
+            # Enrich category & intent keywords so broad thematic searches work
+            intents = []
+            if is_short or cat in DISTRACTIVE_CATEGORIES:
+                intents.extend(["distraction", "distractive", "time waste"])
+            if is_short:
+                intents.extend(["shorts", "short", "#shorts"])
+            if cat in PRODUCTIVE_CATEGORIES:
+                intents.extend(["productive", "productivity", "education"])
+
+            title = str(metadata.get("title", "") or "")
             searchable_text = " ".join(
                 str(value)
                 for value in (
                     doc.get("text", ""),
-                    metadata.get("title", ""),
+                    title,
                     metadata.get("description", ""),
                     metadata.get("channel", ""),
-                    metadata.get("category", ""),
+                    cat,
+                    " ".join(intents),
                     metadata.get("search_query", ""),
                     " ".join(metadata.get("tags", []))
                     if isinstance(metadata.get("tags"), list)
@@ -177,18 +193,32 @@ class VectorStore:
                 if value
             )
             lexical_score = _lexical_relevance(query, searchable_text)
+
+            # Boost score if query matches the title directly
+            title_relevance = _lexical_relevance(query, title)
+            if title_relevance > 0:
+                lexical_score = min(1.0, lexical_score + 0.35 * title_relevance)
+
             vector_score = max(0.0, min(1.0, float(score)))
             if using_local_index:
-                combined_score = 0.75 * lexical_score + 0.25 * vector_score
+                # If there is no keyword/concept relevance on the local index,
+                # do not let random vector hash noise produce false positive matches
+                if lexical_score == 0:
+                    combined_score = 0.0 if vector_score < 0.45 else 0.25 * vector_score
+                else:
+                    combined_score = 0.70 * lexical_score + 0.30 * vector_score
             else:
-                combined_score = 0.5 * lexical_score + 0.5 * vector_score
-            results.append({
-                "score": float(round(combined_score, 4)),
-                "document": doc["text"],
-                "metadata": metadata,
-                "id": doc.get("id"),
-                "lexical_score": lexical_score,
-            })
+                combined_score = 0.50 * lexical_score + 0.50 * vector_score
+
+            # Minimum relevance cutoff: drop noise below 18% match
+            if combined_score >= 0.18:
+                results.append({
+                    "score": float(round(combined_score, 4)),
+                    "document": doc["text"],
+                    "metadata": metadata,
+                    "id": doc.get("id"),
+                    "lexical_score": lexical_score,
+                })
 
         if using_local_index and any(result["lexical_score"] > 0 for result in results):
             results = [result for result in results if result["lexical_score"] > 0]
@@ -197,6 +227,7 @@ class VectorStore:
         results.sort(key=lambda x: x["score"], reverse=True)
         unique_results = []
         seen_ids = set()
+        seen_titles = set()
         for result in results:
             metadata = result["metadata"]
             result_id = (
@@ -205,9 +236,12 @@ class VectorStore:
                 or metadata.get("url")
                 or id(result)
             )
-            if result_id in seen_ids:
+            title_key = (metadata.get("title") or "").strip().lower()
+            if result_id in seen_ids or (title_key and title_key in seen_titles):
                 continue
             seen_ids.add(result_id)
+            if title_key:
+                seen_titles.add(title_key)
             result.pop("id", None)
             result.pop("lexical_score", None)
             unique_results.append(result)

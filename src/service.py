@@ -24,42 +24,56 @@ class YouTubeDistractionService:
         self.vector_store.load()
 
     def _init_db(self):
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS records (
-                id TEXT PRIMARY KEY,
-                type TEXT,
-                url TEXT,
-                video_id TEXT,
-                search_query TEXT,
-                title TEXT,
-                channel TEXT,
-                category TEXT,
-                duration_sec INTEGER,
-                duration_fmt TEXT,
-                visited_at TEXT,
-                date TEXT,
-                hour INTEGER,
-                browser TEXT,
-                tags_json TEXT,
-                description TEXT
-            )
-        """)
-        # Immediate migration: Ensure all YouTube Shorts are categorized as 'Shorts' and marked as type 'shorts'
-        cursor.execute("""
-            UPDATE records 
-            SET category = 'Shorts', type = 'shorts'
-            WHERE url LIKE '%/shorts/%' OR title LIKE '%#shorts%' OR title LIKE '%#short%'
-        """)
-        # For Shorts that had excessive default duration, normalize to 45s
-        cursor.execute("""
-            UPDATE records 
-            SET duration_sec = 45, duration_fmt = '45s'
-            WHERE (category = 'Shorts' OR url LIKE '%/shorts/%') AND (duration_sec > 60 OR duration_sec = 0)
-        """)
-        conn.commit()
-        conn.close()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS records (
+                    id TEXT PRIMARY KEY,
+                    type TEXT,
+                    url TEXT,
+                    video_id TEXT,
+                    search_query TEXT,
+                    title TEXT,
+                    channel TEXT,
+                    category TEXT,
+                    duration_sec INTEGER,
+                    duration_fmt TEXT,
+                    visited_at TEXT,
+                    date TEXT,
+                    hour INTEGER,
+                    browser TEXT,
+                    tags_json TEXT,
+                    description TEXT
+                )
+            """)
+            # Immediate migration: Ensure all YouTube Shorts are categorized as 'Shorts' and marked as type 'shorts'
+            cursor.execute("""
+                UPDATE records 
+                SET category = 'Shorts', type = 'shorts'
+                WHERE url LIKE '%/shorts/%' OR title LIKE '%#shorts%' OR title LIKE '%#short%'
+            """)
+            # For Shorts that had excessive default duration, normalize to 45s
+            cursor.execute("""
+                UPDATE records 
+                SET duration_sec = 45, duration_fmt = '45s'
+                WHERE (category = 'Shorts' OR url LIKE '%/shorts/%') AND (duration_sec > 60 OR duration_sec = 0)
+            """)
+            # Fix any missing duration_fmt
+            cursor.execute("""
+                UPDATE records 
+                SET duration_fmt = CASE 
+                    WHEN duration_sec >= 3600 THEN (duration_sec / 3600) || 'h ' || ((duration_sec % 3600) / 60) || 'm'
+                    WHEN duration_sec >= 60 THEN (duration_sec / 60) || 'm'
+                    ELSE duration_sec || 's'
+                END
+                WHERE duration_fmt IS NULL OR LENGTH(duration_fmt) = 0
+            """)
+            conn.commit()
+            conn.close()
+        except sqlite3.OperationalError as e:
+            # If database is read-only (e.g. running in restricted mode), continue safely
+            pass
 
     def sync_history(self, days_back: int = 14, use_demo_if_empty: bool = True) -> int:
         """
@@ -101,7 +115,7 @@ class YouTubeDistractionService:
                 r.get("channel", "YouTube Creator"),
                 r.get("category", "General"),
                 r.get("duration_sec", 0),
-                r.get("duration_fmt", ""),
+                r.get("duration_fmt") or self.api_client._format_duration(r.get("duration_sec", 0)),
                 r.get("visited_at", ""),
                 r.get("date", ""),
                 r.get("hour", 0),
@@ -159,4 +173,46 @@ class YouTubeDistractionService:
         enriched = self.api_client.enrich_records(records)
         # Store in db and vector store
         self.vector_store.build_from_records(enriched)
+        return len(enriched)
+
+    def seed_date_range(self, start_date: str = "2026-11-02", end_date: str = "2026-11-14") -> int:
+        """Seeds YouTube history for a specific date range so it is available in the dashboard."""
+        records = TakeoutHistoryLoader.generate_range_dataset(start_date=start_date, end_date=end_date)
+        enriched = self.api_client.enrich_records(records)
+
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        for r in enriched:
+            rec_id = f"{r.get('video_id') or r.get('search_query')}_{r.get('visited_at')}"
+            cursor.execute("""
+                INSERT OR REPLACE INTO records (
+                    id, type, url, video_id, search_query, title, channel,
+                    category, duration_sec, duration_fmt, visited_at, date,
+                    hour, browser, tags_json, description
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                rec_id,
+                r.get("type", "video"),
+                r.get("url", ""),
+                r.get("video_id", ""),
+                r.get("search_query", ""),
+                r.get("title", ""),
+                r.get("channel", "YouTube Creator"),
+                r.get("category", "General"),
+                r.get("duration_sec", 0),
+                r.get("duration_fmt") or self.api_client._format_duration(r.get("duration_sec", 0)),
+                r.get("visited_at", ""),
+                r.get("date", ""),
+                r.get("hour", 0),
+                r.get("browser", "Chrome (Synced)"),
+                json.dumps(r.get("tags", [])),
+                r.get("description", "")
+            ))
+        conn.commit()
+        conn.close()
+
+        # Update Vector Store RAG Index with all records
+        all_records = self.get_all_records()
+        self.vector_store.build_from_records(all_records)
+        print(f"[Seed] Successfully added {len(enriched)} records across {start_date} to {end_date}.")
         return len(enriched)

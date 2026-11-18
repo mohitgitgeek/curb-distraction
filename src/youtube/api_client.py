@@ -32,7 +32,7 @@ def parse_iso8601_duration(duration_str: str) -> int:
     """Convert ISO 8601 duration string like 'PT1H15M30S' to total seconds."""
     if not duration_str:
         return 0
-    pattern = r"PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?"
+    pattern = r"PT(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?" #PT : Period Of Time, H : Hours, M : Minutes, S : Seconds
     match = re.match(pattern, duration_str)
     if not match:
         return 0
@@ -103,7 +103,8 @@ class YouTubeAPIClient:
                         record["duration_sec"] = min(browser_sec, 60) if browser_sec > 5 else 45
                     else:
                         record["duration_sec"] = browser_sec if browser_sec > 30 else 720
-                    record["duration_fmt"] = self._format_duration(record["duration_sec"])
+
+                record["duration_fmt"] = self._format_duration(record.get("duration_sec", 0))
 
                 if not record.get("channel"):
                     record["channel"] = "YouTube Creator"
@@ -115,6 +116,10 @@ class YouTubeAPIClient:
             # Ensure Shorts are always categorized as Shorts
             if is_short:
                 record["category"] = "Shorts"
+
+            # Always ensure duration_fmt is present
+            if not record.get("duration_fmt"):
+                record["duration_fmt"] = self._format_duration(record.get("duration_sec", 0))
 
             enriched.append(record)
 
@@ -232,4 +237,6 @@ class YouTubeAPIClient:
         secs = seconds % 60
         if hours > 0:
             return f"{hours}h {mins}m"
-        return f"{mins}m {secs}s" if mins < 5 else f"{mins}m"
+        if mins > 0:
+            return f"{mins}m {secs}s" if mins < 3 and secs > 0 else f"{mins}m"
+        return f"{secs}s"
